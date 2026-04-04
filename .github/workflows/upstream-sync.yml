@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   sync:
@@ -28,3 +29,12 @@ jobs:
             exit 1
           }
           git push origin main
+
+      - name: Alert on conflict
+        if: failure()
+        run: |
+          gh issue create \
+            --title "Upstream sync failed: merge conflict" \
+            --body "Weekly sync from upstream FLT failed due to merge conflict. Manual resolution needed. See: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
