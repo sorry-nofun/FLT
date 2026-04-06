@@ -80,9 +80,47 @@ lemma injective_zHat :
     (Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat).symm) hxy
   exact Algebra.TensorProduct.includeRight_injective (Int.cast_injective (α := ℚ)) this
 
--- should I rearrange tensors? Not sure if D^ should be (ℚ ⊗ 𝓞) ⊗ ℤhat or ℚ ⊗ (𝓞 ⊗ Zhat)
+private noncomputable abbrev assocEquiv :=
+  Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat
+
+/-- Any element of ℚ ⊗[ℤ] 𝓞^ can be written as (1/N) ⊗ z'. -/
+private lemma rat_tensor_canonicalForm (w : ℚ ⊗[ℤ] 𝓞^) :
+    ∃ (N : ℕ+) (z' : 𝓞^), w = (1 / N : ℚ) ⊗ₜ z' := by
+  induction w using TensorProduct.induction_on with
+  | zero => exact ⟨1, 0, by simp⟩
+  | tmul q x =>
+    refine ⟨⟨q.den, q.den_pos⟩, q.num • x, ?_⟩
+    rw [show (1 / (↑↑⟨q.den, q.den_pos⟩ : ℕ+) : ℚ) = (q.den : ℚ)⁻¹ from by simp [one_div]]
+    rw [TensorProduct.tmul_smul, TensorProduct.smul_tmul', zsmul_eq_mul,
+      ← Rat.mul_den_eq_num, mul_assoc,
+      mul_inv_cancel₀ (Nat.cast_ne_zero.mpr (Rat.den_ne_zero q)), mul_one]
+  | add x y hx hy =>
+    obtain ⟨N₁, z₁, rfl⟩ := hx
+    obtain ⟨N₂, z₂, rfl⟩ := hy
+    refine ⟨N₁ * N₂, (N₁ : ℤ) • z₂ + (N₂ : ℤ) • z₁, ?_⟩
+    simp only [TensorProduct.tmul_add, ← zsmul_eq_mul,
+      TensorProduct.tmul_smul, TensorProduct.smul_tmul']
+    simp only [one_div, PNat.mul_coe, Nat.cast_mul, mul_inv_rev, zsmul_eq_mul, Int.cast_natCast,
+      ne_eq, Nat.cast_eq_zero, PNat.ne_zero, not_false_eq_true, mul_inv_cancel_left₀]
+    rw [add_comm]
+    congr
+    simp [mul_comm]
+
+private lemma assoc_j₁_j₂ (q : ℚ) (z' : 𝓞^) :
+    assocEquiv.symm (q ⊗ₜ[ℤ] z') = j₁ (q ⊗ₜ 1 : D) * j₂ z' := by
+  have : q ⊗ₜ[ℤ] z' = (q ⊗ₜ (1 : 𝓞^)) * ((1 : ℚ) ⊗ₜ z') := by
+    simp [Algebra.TensorProduct.tmul_mul_tmul]
+  rw [this, map_mul]
+  rfl
+
 lemma canonicalForm (z : D^) : ∃ (N : ℕ+) (z' : 𝓞^), z = j₁ ((N⁻¹ : ℚ) ⊗ₜ 1 : D) * j₂ z' := by
-  sorry
+  obtain ⟨N, z', hw⟩ := rat_tensor_canonicalForm (assocEquiv z)
+  refine ⟨N, z', ?_⟩
+  have := congr_arg assocEquiv.symm hw
+  rw [AlgEquiv.symm_apply_apply] at this
+  rw [this, assoc_j₁_j₂]
+  congr 2
+  simp [one_div]
 
 lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ u * j₂ v := sorry
 
