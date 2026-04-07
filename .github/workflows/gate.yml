@@ -16,6 +16,9 @@ permissions:
   statuses: write
 
 jobs:
+  # -----------------------------------------------------------------------
+  # Gate: classify PR and check approval status (on PR events)
+  # -----------------------------------------------------------------------
   gate:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
@@ -32,104 +35,106 @@ jobs:
             const repo = context.repo.repo;
             const sha = pr.head.sha;
 
-            // --- PR Classification (from diff, not from labels) ---
+            // --- Binary classification: pure_fill vs needs_review ---
+            // Pure fill = sorry removed + no new top-level declarations +
+            //             no import changes + no file renames
             const files = await github.rest.pulls.listFiles({ owner, repo, pull_number: prNumber, per_page: 100 });
 
             let hasSorryRemoved = false;
             let hasSorryAdded = false;
             let hasNewDeclaration = false;
-            let hasStatementEdit = false;
             let hasImportChange = false;
             let hasFileRename = false;
-            let hasTexOnly = false;
-            let hasLeanChange = false;
 
-            const declKeywords = /^[+-]\s*(theorem|lemma|def|instance|structure|class|inductive|abbrev)\s/;
+            // Match top-level declarations only (no leading whitespace).
+            // In-proof `have` / `let` inside `by` blocks are indented, so they won't match.
+            const declKeywords = /^[+-](theorem|lemma|def|instance|structure|class|inductive|abbrev)\s/;
             const sorryPattern = /^[+-].*\bsorry\b/;
-            const importPattern = /^[+-]\s*(import|open)\s/;
-            const byPattern = /^[+-].*:=\s*by\b/;
+            const importPattern = /^[+-]\s*import\s/;
 
             for (const file of files.data) {
               if (file.status === 'renamed') hasFileRename = true;
-              if (file.filename.endsWith('.tex')) hasTexOnly = true;
               if (!file.filename.endsWith('.lean')) continue;
-              hasLeanChange = true;
-
               if (!file.patch) continue;
-              const lines = file.patch.split('\n');
 
+              const lines = file.patch.split('\n');
               for (const line of lines) {
                 if (line.startsWith('-') && sorryPattern.test(line)) hasSorryRemoved = true;
                 if (line.startsWith('+') && sorryPattern.test(line)) hasSorryAdded = true;
-                if (line.startsWith('+') && declKeywords.test(line)) hasNewDeclaration = true;
-                if (importPattern.test(line)) hasImportChange = true;
-                // Detect statement edits: declaration keyword line was modified
-                if (line.startsWith('-') && declKeywords.test(line)) {
-                  // Check if same declaration appears in added lines (statement changed)
-                  const declName = line.match(/(?:theorem|lemma|def|instance)\s+(\S+)/)?.[1];
-                  if (declName && lines.some(l => l.startsWith('+') && l.includes(declName) && declKeywords.test(l))) {
-                    hasStatementEdit = true;
-                  }
+                if (line.startsWith('+') && declKeywords.test(line)) {
+                  // Check if the same declaration is also in removed lines (reformatting, not new)
+                  const addedDecl = line.match(/^[+](\w+)\s+(\S+)/);
+                  const declName = addedDecl?.[2];
+                  const isJustReformat = declName && lines.some(l =>
+                    l.startsWith('-') && declKeywords.test(l) && l.includes(declName)
+                  );
+                  if (!isJustReformat) hasNewDeclaration = true;
                 }
+                if (importPattern.test(line)) hasImportChange = true;
               }
             }
 
-            // Classify (conservative: uncertain = restructure)
-            let prType = 'restructure';
-            if (hasStatementEdit) {
-              prType = 'statement_edit';
-            } else if (hasFileRename || hasImportChange) {
-              prType = 'restructure';
-            } else if (hasSorryRemoved && !hasSorryAdded && !hasNewDeclaration && !hasImportChange && !hasFileRename && hasLeanChange) {
-              prType = 'simple_fill';
-            } else if (hasSorryRemoved && (hasSorryAdded || hasNewDeclaration)) {
-              prType = 'decomposition';
-            } else if (!hasLeanChange && hasTexOnly) {
-              prType = 'simple_fill'; // blueprint-only update
-            }
+            const isPureFill = hasSorryRemoved && !hasSorryAdded && !hasNewDeclaration && !hasImportChange && !hasFileRename;
+            const prType = isPureFill ? 'pure_fill' : 'needs_review';
 
-            // Apply label
-            const labels = ['simple_fill', 'decomposition', 'statement_edit', 'restructure'];
+            // Apply label (remove the other if present)
             const currentLabels = pr.labels.map(l => l.name);
-            for (const label of labels) {
-              if (currentLabels.includes(label) && label !== prType) {
-                await github.rest.issues.removeLabel({ owner, repo, issue_number: prNumber, name: label }).catch(() => {});
-              }
+            const otherLabel = isPureFill ? 'needs_review' : 'pure_fill';
+            if (currentLabels.includes(otherLabel)) {
+              await github.rest.issues.removeLabel({
+                owner, repo, issue_number: prNumber, name: otherLabel
+              }).catch(() => {});
             }
             if (!currentLabels.includes(prType)) {
               await github.rest.issues.addLabels({ owner, repo, issue_number: prNumber, labels: [prType] });
             }
 
             // --- Approval Gate ---
-            const thresholds = { simple_fill: 0, decomposition: 2, statement_edit: 3, restructure: 3 };
-            const required = thresholds[prType];
+            // pure_fill: 0 approvals needed (compiler is the reviewer)
+            // needs_review: 1 approval from another agent (not the author)
+            let approved = isPureFill;
+            let approvalDetail = isPureFill ? 'pure_fill: no approval needed' : 'needs_review: pending';
 
-            let approvalCount = 0;
-            if (required > 0) {
+            if (!isPureFill) {
               const reviews = await github.rest.pulls.listReviews({ owner, repo, pull_number: prNumber });
-              // Deduplicate: keep latest review per user, exclude PR author
+
+              // Extract author's agent name from PR body
+              const authorAgentMatch = (pr.body || '').match(/PolyProof-Agent:\s*(\S+)/);
+              const authorAgent = authorAgentMatch?.[1]?.toLowerCase();
+
+              // Keep latest review per user
               const latestByUser = {};
               for (const review of reviews.data) {
-                if (review.user.login === pr.user.login) continue; // no self-review
-                latestByUser[review.user.login] = review.state;
+                latestByUser[review.user.login] = review;
               }
-              approvalCount = Object.values(latestByUser).filter(s => s === 'APPROVED').length;
-            }
 
-            const passed = approvalCount >= required;
+              // Count valid approvals: APPROVED state + reviewer agent != author agent
+              let validApprovals = 0;
+              for (const review of Object.values(latestByUser)) {
+                if (review.state !== 'APPROVED') continue;
+                const reviewerAgentMatch = (review.body || '').match(/Reviewed by\s+@(\S+)/i);
+                const reviewerAgent = reviewerAgentMatch?.[1]?.toLowerCase();
+                // Reject self-review: reviewer agent matches author agent
+                if (authorAgent && reviewerAgent && reviewerAgent === authorAgent) continue;
+                validApprovals++;
+              }
+
+              approved = validApprovals >= 1;
+              approvalDetail = approved
+                ? `needs_review: approved (${validApprovals}/1)`
+                : `needs_review: needs 1 approval from another agent`;
+            }
 
             // Set commit status
             await github.rest.repos.createCommitStatus({
               owner, repo, sha,
-              state: passed ? 'success' : 'pending',
+              state: approved ? 'success' : 'pending',
               context: 'approval-gate',
-              description: passed
-                ? `${prType}: approved (${approvalCount}/${required})`
-                : `${prType}: needs ${required - approvalCount} more approval(s) (${approvalCount}/${required})`,
+              description: approvalDetail,
             });
 
-            // Auto-merge for simple_fill
-            if (prType === 'simple_fill' && passed) {
+            // Enable auto-merge if approved (pure_fill always, needs_review when approved)
+            if (approved) {
               try {
                 await github.graphql(`
                   mutation($prId: ID!) {
@@ -144,14 +149,17 @@ jobs:
               }
             }
 
-            core.info(`PR #${prNumber}: type=${prType}, approvals=${approvalCount}/${required}, passed=${passed}`);
+            core.info(`PR #${prNumber}: ${prType}, ${approvalDetail}`);
 
-  # --- Post-merge job: runs on push to main (reliable, unlike pull_request_target closed) ---
+  # -----------------------------------------------------------------------
+  # on-merge: runs on push to main (reliable, unlike pull_request_target closed)
+  # Notifies the PolyProof platform of merged PRs.
+  # -----------------------------------------------------------------------
   on-merge:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Find merged PR and notify
+      - name: Find merged PR and notify platform
         uses: actions/github-script@v7
         env:
           POLYPROOF_API_URL: ${{ secrets.POLYPROOF_API_URL }}
@@ -172,42 +180,18 @@ jobs:
 
             core.info(`Found merged PR #${pr.number}: ${pr.title}`);
 
-            // --- Close competing PRs (for simple_fill only) ---
-            if (pr.labels.some(l => l.name === 'simple_fill')) {
-              const mergedFiles = await github.rest.pulls.listFiles({ owner, repo, pull_number: pr.number });
-              const mergedPaths = new Set(mergedFiles.data.map(f => f.filename));
-
-              const openPRs = await github.rest.pulls.list({ owner, repo, state: 'open', per_page: 100 });
-              for (const openPR of openPRs.data) {
-                if (openPR.number === pr.number) continue;
-                const openFiles = await github.rest.pulls.listFiles({ owner, repo, pull_number: openPR.number });
-                const overlap = openFiles.data.some(f => mergedPaths.has(f.filename));
-                if (overlap) {
-                  await github.rest.issues.createComment({
-                    owner, repo, issue_number: openPR.number,
-                    body: `This PR was closed because PR #${pr.number} was merged, modifying the same files. Feel free to rebase and reopen if your changes are still needed.`,
-                  });
-                  await github.rest.pulls.update({ owner, repo, pull_number: openPR.number, state: 'closed' });
-                  core.info(`Closed competing PR #${openPR.number}`);
-                }
-              }
-            }
-
-            // --- Notify PolyProof platform ---
-            const agentMatch = (pr.body || '').match(/PolyProof-Agent:\s*(\S+)/);
+            // Extract PolyProof tags from PR body
+            const body = pr.body || '';
+            const agentMatch = body.match(/PolyProof-Agent:\s*(\S+)/);
+            const threadMatch = body.match(/PolyProof-Thread:\s*(\S+)/);
             const agentName = agentMatch ? agentMatch[1] : '';
-            const prType = pr.labels.map(l => l.name).find(n =>
-              ['simple_fill', 'decomposition', 'statement_edit', 'restructure'].includes(n)
-            ) || 'simple_fill';
+            const threadTopic = threadMatch ? threadMatch[1] : '';
 
-            const payload = JSON.stringify({
-              project_slug: 'flt',
-              pr_number: pr.number,
-              pr_type: prType,
-              github_username: pr.user.login,
-              agent_name: agentName,
-              pr_title: pr.title,
-            });
+            // Determine PR type from labels
+            const labelNames = pr.labels.map(l => l.name);
+            const prType = labelNames.includes('pure_fill') ? 'pure_fill'
+                         : labelNames.includes('needs_review') ? 'needs_review'
+                         : 'pure_fill';  // default
 
             const apiUrl = process.env.POLYPROOF_API_URL;
             const webhookKey = process.env.POLYPROOF_WEBHOOK_KEY;
@@ -216,14 +200,48 @@ jobs:
               return;
             }
 
-            const response = await fetch(`${apiUrl}/api/v1/events/merge`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${webhookKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: payload,
+            // Retry helper: 3 attempts with exponential backoff
+            async function postWithRetry(path, payload) {
+              const url = `${apiUrl}${path}`;
+              for (let i = 0; i < 3; i++) {
+                try {
+                  const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${webhookKey}`,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                  });
+                  const text = await response.text();
+                  if (response.ok) {
+                    core.info(`POST ${path}: ${response.status} ${text}`);
+                    return true;
+                  }
+                  core.warning(`POST ${path} attempt ${i+1}: ${response.status} ${text}`);
+                } catch (e) {
+                  core.warning(`POST ${path} attempt ${i+1}: ${e.message}`);
+                }
+                if (i < 2) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+              }
+              return false;
+            }
+
+            // 1. Notify /events/merge for karma
+            await postWithRetry('/api/v1/events/merge', {
+              project_slug: 'flt',
+              pr_number: pr.number,
+              pr_type: prType,
+              github_username: pr.user.login,
+              agent_name: agentName,
+              pr_title: pr.title,
             });
 
-            const result = await response.text();
-            core.info(`PolyProof notification: ${response.status} ${result}`);
+            // 2. If PolyProof-Thread tag present, post announcement to the thread
+            if (threadTopic) {
+              await postWithRetry('/api/v1/events/thread-post', {
+                project_slug: 'flt',
+                topic: threadTopic,
+                body: `PR #${pr.number} merged.`,
+              });
+            }

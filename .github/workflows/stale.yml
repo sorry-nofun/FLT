@@ -3,22 +3,94 @@ name: Close stale PRs
 on:
   schedule:
     - cron: '0 */6 * * *'  # Every 6 hours
+  workflow_dispatch:  # manual trigger for testing
 
 permissions:
-  issues: write
+  contents: read
   pull-requests: write
 
 jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v9
+      - name: Close stale PRs and post handoff
+        uses: actions/github-script@v7
+        env:
+          POLYPROOF_API_URL: ${{ secrets.POLYPROOF_API_URL }}
+          POLYPROOF_WEBHOOK_KEY: ${{ secrets.POLYPROOF_WEBHOOK_KEY }}
         with:
-          stale-pr-message: 'This PR has been inactive for 24 hours and will be closed in 24 hours if no activity occurs. If you are still working on this, push a commit or leave a comment.'
-          close-pr-message: 'Closed due to inactivity. The work item is available for other agents. Feel free to open a new PR if you want to try again.'
-          days-before-pr-stale: 1
-          days-before-pr-close: 2
-          # Structural PRs get more time (72h stale, 96h close)
-          exempt-pr-labels: 'decomposition,statement_edit,restructure'
-          days-before-issue-stale: -1  # Don't touch issues
-          days-before-issue-close: -1
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const STALE_HOURS = 24;
+            const staleThresholdMs = STALE_HOURS * 60 * 60 * 1000;
+            const now = Date.now();
+
+            // List all open PRs
+            const openPRs = await github.rest.pulls.list({
+              owner, repo, state: 'open', per_page: 100
+            });
+
+            let closedCount = 0;
+            for (const pr of openPRs.data) {
+              // Get the latest commit on the PR's head branch
+              const { data: commit } = await github.rest.repos.getCommit({
+                owner, repo, ref: pr.head.sha
+              });
+
+              const lastCommitAt = new Date(commit.commit.committer.date).getTime();
+              const ageMs = now - lastCommitAt;
+
+              if (ageMs < staleThresholdMs) {
+                core.info(`PR #${pr.number}: active (last commit ${Math.round(ageMs / 3600000)}h ago)`);
+                continue;
+              }
+
+              core.info(`PR #${pr.number}: STALE (last commit ${Math.round(ageMs / 3600000)}h ago) — closing`);
+
+              // Post GitHub comment
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr.number,
+                body: `Closed due to inactivity (no new commits for ${STALE_HOURS}h). Branch \`${pr.head.ref}\` remains available — anyone can pick this up by opening a new PR from it or cherry-picking the commits.`
+              });
+
+              // Close the PR
+              await github.rest.pulls.update({
+                owner, repo, pull_number: pr.number, state: 'closed'
+              });
+
+              // Post to platform thread if PolyProof-Thread tag is present
+              const body = pr.body || '';
+              const threadMatch = body.match(/PolyProof-Thread:\s*(\S+)/);
+              if (threadMatch) {
+                const topic = threadMatch[1];
+                const apiUrl = process.env.POLYPROOF_API_URL;
+                const webhookKey = process.env.POLYPROOF_WEBHOOK_KEY;
+                if (apiUrl && webhookKey) {
+                  try {
+                    const response = await fetch(`${apiUrl}/api/v1/events/thread-post`, {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${webhookKey}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        project_slug: 'flt',
+                        topic: topic,
+                        body: `PR #${pr.number} was closed due to inactivity — anyone can pick this up.`,
+                      }),
+                    });
+                    const text = await response.text();
+                    core.info(`Thread post for PR #${pr.number}: ${response.status} ${text}`);
+                  } catch (e) {
+                    core.warning(`Thread post failed for PR #${pr.number}: ${e.message}`);
+                  }
+                }
+              } else {
+                core.info(`PR #${pr.number}: no PolyProof-Thread tag, skipping thread notification`);
+              }
+
+              closedCount++;
+            }
+
+            core.info(`Stale sweep complete: closed ${closedCount} PRs`);
