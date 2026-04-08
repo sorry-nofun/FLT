@@ -536,7 +536,98 @@ lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ 
     have h_sub : u * v - 1 = 0 :=
       (IsAddTorsionFree.zsmul_eq_zero_iff_right hNM_ne).mp h_smul
     exact sub_eq_zero.mp h_sub
-  -- Step 9: Construct the units u_unit : 𝓞^ˣ and find δ : Dˣ with z = j₁ δ * j₂ u_unit
-  sorry
+  -- Step 9: Construct the units V_unit : 𝓞^ˣ and δ : Dˣ with z = j₁ δ * j₂ V_unit
+  let V_unit : 𝓞^ˣ := ⟨v, u, hvu, huv⟩
+  -- Define δ : Dˣ explicitly with value (M/norm α) ⊗ star α and inverse (M⁻¹) ⊗ α
+  have hnormq_ne : (Hurwitz.norm α : ℚ) ≠ 0 := by
+    exact_mod_cast hnorm_pos.ne'
+  have h_dval_dinv :
+      (((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D)) *
+        (((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] α : D)) = (1 : D) := by
+    rw [Algebra.TensorProduct.tmul_mul_tmul]
+    rw [show (((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹ * (((M : ℕ+) : ℚ))⁻¹ : ℚ) =
+        (Hurwitz.norm α : ℚ)⁻¹ from by field_simp]
+    -- Now goal: ((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ (star α * α) : D) = 1
+    -- This equals ((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ star α) * ((1 : ℚ) ⊗ₜ α) by tmul_mul_tmul,
+    -- which equals 1 by HurwitzRat.inv_mul_one_tmul_eq_one.
+    rw [show (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] (star α * α) : D)) =
+          (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] star α : D)) *
+            (((1 : ℚ) ⊗ₜ[ℤ] α : D)) from by
+      rw [Algebra.TensorProduct.tmul_mul_tmul, mul_one]]
+    exact HurwitzRat.inv_mul_one_tmul_eq_one α hα_ne_zero
+  have h_dinv_dval :
+      (((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] α : D)) *
+        (((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D)) = (1 : D) := by
+    rw [Algebra.TensorProduct.tmul_mul_tmul]
+    rw [show ((((M : ℕ+) : ℚ))⁻¹ * (((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) : ℚ) =
+        (Hurwitz.norm α : ℚ)⁻¹ from by field_simp]
+    -- Goal: ((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ (α * star α) : D) = 1
+    -- Rewrite α * star α via Hurwitz.norm_eq_mul_conj to star α * α (no, norm is symmetric)
+    -- Actually: α * star α = norm α = star α * α. Let's convert α * star α to star α * α.
+    rw [show (α * star α : 𝓞) = (star α * α : 𝓞) from by
+      have h1 : (α * star α : 𝓞) = ((Hurwitz.norm α : ℤ) : 𝓞) := by
+        have := Hurwitz.norm_eq_mul_conj α
+        exact_mod_cast this.symm
+      have h2 : (star α * α : 𝓞) = ((Hurwitz.norm α : ℤ) : 𝓞) :=
+        (HurwitzRat.star_mul_self_eq_norm α).symm
+      rw [h1, h2]]
+    rw [show (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] (star α * α) : D)) =
+          (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] star α : D)) *
+            (((1 : ℚ) ⊗ₜ[ℤ] α : D)) from by
+      rw [Algebra.TensorProduct.tmul_mul_tmul, mul_one]]
+    exact HurwitzRat.inv_mul_one_tmul_eq_one α hα_ne_zero
+  let δ : Dˣ := {
+    val := ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D)
+    inv := ((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] α : D)
+    val_inv := h_dval_dinv
+    inv_val := h_dinv_dval
+  }
+  refine ⟨δ, V_unit, ?_⟩
+  -- Goal: (z : D^) = j₁ δ.val * j₂ V_unit.val
+  show (z : D^) = j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) * j₂ v
+  -- Approach: show (j₁ dval * j₂ v) * z⁻¹ = 1, then cancel.
+  have h_j₂α : j₂ (oToOhat α) = j₁ ((1 : ℚ) ⊗ₜ[ℤ] α : D) := by
+    change ((Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat).symm.toAlgHom.comp
+      (Algebra.TensorProduct.includeRight : 𝓞^ →ₐ[ℤ] ℚ ⊗ 𝓞^))
+        ((Algebra.TensorProduct.includeLeft : 𝓞 →ₐ[ℤ] 𝓞^) α) =
+      (Algebra.TensorProduct.includeLeft : D →ₐ[ℤ] D^) ((1 : ℚ) ⊗ₜ[ℤ] α : D)
+    rfl
+  -- Compute (j₁ dval * j₂ v) * (z⁻¹ : D^) = 1
+  have h_prod_eq_one :
+      (j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) * j₂ v) *
+        ((z⁻¹ : D^ˣ) : D^) = 1 := by
+    rw [hzinv]
+    -- (j₁ dval * j₂ v) * (j₁((M⁻¹) ⊗ 1) * j₂ w') = 1
+    rw [show (j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) * j₂ v) *
+            (j₁ ((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] (1 : 𝓞) : D) * j₂ w') =
+          j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) *
+            j₁ ((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] (1 : 𝓞) : D) * (j₂ v * j₂ w') from by
+      rw [mul_assoc (j₁ _) (j₂ v), ← mul_assoc (j₂ v) (j₁ _) (j₂ w'),
+        (j₁_rat_mul_comm (((M : ℕ+) : ℚ))⁻¹ v).symm,
+        mul_assoc (j₁ _) (j₂ v) (j₂ w'),
+        ← mul_assoc (j₁ _) (j₁ _) _]]
+    rw [← map_mul j₂, hv']
+    rw [← map_mul j₁, h_j₂α, ← map_mul j₁]
+    -- Goal: j₁ ((dval * (M⁻¹ ⊗ 1)) * (1 ⊗ α)) = 1
+    have h_inner :
+        (((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) *
+          ((((M : ℕ+) : ℚ))⁻¹ ⊗ₜ[ℤ] (1 : 𝓞) : D) : D) *
+          ((1 : ℚ) ⊗ₜ[ℤ] α : D) = (1 : D) := by
+      rw [Algebra.TensorProduct.tmul_mul_tmul, mul_one]
+      rw [Algebra.TensorProduct.tmul_mul_tmul, mul_one]
+      rw [show (((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹ * (((M : ℕ+) : ℚ))⁻¹ : ℚ) =
+          (Hurwitz.norm α : ℚ)⁻¹ from by field_simp]
+      rw [show (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] (star α * α) : D)) =
+            (((Hurwitz.norm α : ℚ)⁻¹ ⊗ₜ[ℤ] star α : D)) *
+              (((1 : ℚ) ⊗ₜ[ℤ] α : D)) from by
+        rw [Algebra.TensorProduct.tmul_mul_tmul, mul_one]]
+      exact HurwitzRat.inv_mul_one_tmul_eq_one α hα_ne_zero
+    rw [h_inner, map_one]
+  -- Conclude (z : D^) = j₁ dval * j₂ v
+  have hcancel : (j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) * j₂ v) *
+      ((z⁻¹ : D^ˣ) : D^) * ((z : D^ˣ) : D^) =
+      (j₁ ((((M : ℕ+) : ℚ) * (Hurwitz.norm α : ℚ)⁻¹) ⊗ₜ[ℤ] star α : D) * j₂ v) := by
+    rw [mul_assoc, ← Units.val_mul, inv_mul_cancel, Units.val_one, mul_one]
+  rw [← hcancel, h_prod_eq_one, one_mul]
 
 end HurwitzRatHat
