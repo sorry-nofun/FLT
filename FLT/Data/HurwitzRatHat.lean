@@ -259,6 +259,71 @@ private lemma j₂_mul_descent
   have hR : ((N * M : ℕ+) : 𝓞^) = (((N * M : ℕ+) : ℕ) : 𝓞^) := by push_cast; rfl
   rw [hL, hR, map_natCast, map_natCast]
 
-lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ u * j₂ v := sorry
+lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ u * j₂ v := by
+  -- Step 1: Apply canonicalForm to z and z⁻¹
+  obtain ⟨N, z', hz⟩ := canonicalForm (z : D^)
+  obtain ⟨M, w', hzinv⟩ := canonicalForm ((z⁻¹ : (D^)ˣ) : D^)
+  -- Step 2: Use j₂_mul_descent twice to get z' * w' = NM and w' * z' = NM in 𝓞^
+  have hzw : z' * w' = ((N * M : ℕ+) : 𝓞^) := by
+    apply j₂_mul_descent N M z' w'
+    rw [← hz, ← hzinv, ← Units.val_mul, mul_inv_cancel, Units.val_one]
+  have hwz : w' * z' = ((N * M : ℕ+) : 𝓞^) := by
+    have h := j₂_mul_descent M N w' z' (by
+      rw [← hzinv, ← hz, ← Units.val_mul, inv_mul_cancel, Units.val_one])
+    rw [show (M * N : ℕ+) = N * M from mul_comm _ _] at h
+    exact h
+  -- Step 3: Form the left ideal I = {a : 𝓞 | (a ⊗ₜ 1 : 𝓞^) ∈ Submodule.span 𝓞^ {w'}}
+  let oToOhat : 𝓞 →ₐ[ℤ] 𝓞^ := Algebra.TensorProduct.includeLeft
+  let I : Submodule 𝓞 𝓞 := {
+    carrier := {a : 𝓞 | oToOhat a ∈ Submodule.span 𝓞^ ({w'} : Set 𝓞^)}
+    add_mem' := fun {a b} ha hb => by
+      simp only [Set.mem_setOf_eq, map_add] at ha hb ⊢
+      exact Submodule.add_mem _ ha hb
+    zero_mem' := by
+      simp only [Set.mem_setOf_eq, map_zero]
+      exact Submodule.zero_mem _
+    smul_mem' := fun c a ha => by
+      simp only [Set.mem_setOf_eq] at ha ⊢
+      change oToOhat (c * a) ∈ _
+      rw [map_mul]
+      exact Submodule.smul_mem _ (oToOhat c) ha
+  }
+  -- Step 4: NM ∈ I (since (NM : 𝓞^) = z' * w')
+  have hoToOhat_natCast : ∀ k : ℕ, oToOhat ((k : 𝓞)) = (k : 𝓞^) := by
+    intro k
+    change (Algebra.TensorProduct.includeLeft : 𝓞 →ₐ[ℤ] 𝓞^) (k : 𝓞) = _
+    rw [map_natCast]
+  have hNM_in_I : ((N * M : ℕ+) : 𝓞) ∈ I := by
+    show oToOhat ((N * M : ℕ+) : 𝓞) ∈ Submodule.span 𝓞^ ({w'} : Set 𝓞^)
+    rw [show ((N * M : ℕ+) : 𝓞) = (((N * M : ℕ+) : ℕ) : 𝓞) from by push_cast; rfl,
+      hoToOhat_natCast,
+      show (((N * M : ℕ+) : ℕ) : 𝓞^) = ((N * M : ℕ+) : 𝓞^) from by push_cast; rfl,
+      ← hzw]
+    exact Submodule.smul_mem _ z' (Submodule.mem_span_singleton_self w')
+  have hI_ne_bot : I ≠ ⊥ := by
+    intro h
+    have h0 : ((N * M : ℕ+) : 𝓞) ∈ (⊥ : Submodule 𝓞 𝓞) := h ▸ hNM_in_I
+    rw [Submodule.mem_bot] at h0
+    have h_pos : ((N * M : ℕ+) : ℕ) > 0 := PNat.pos _
+    have h2 : ((((N * M : ℕ+) : ℕ) : 𝓞) : 𝓞) = ((0 : ℕ) : 𝓞) := by
+      simp only [Nat.cast_zero]
+      have : ((N * M : ℕ+) : 𝓞) = (((N * M : ℕ+) : ℕ) : 𝓞) := by push_cast; rfl
+      rw [← this]; exact h0
+    have h3 : ((N * M : ℕ+) : ℕ) = 0 := Nat.cast_injective h2
+    omega
+  -- Step 5: Apply Hurwitz.left_ideal_princ to get α
+  obtain ⟨α, hα_eq⟩ := Hurwitz.left_ideal_princ I
+  have hα_in_I : α ∈ I := by rw [hα_eq]; exact Submodule.mem_span_singleton_self α
+  have hα_ne_zero : α ≠ 0 := by
+    intro h
+    apply hI_ne_bot
+    rw [hα_eq, h, Submodule.span_singleton_eq_bot.mpr rfl]
+  -- α has positive norm
+  have hnorm_pos : (Hurwitz.norm α) > 0 := by
+    have h1 : Hurwitz.norm α ≠ 0 := fun h => hα_ne_zero ((Hurwitz.norm_eq_zero α).mp h)
+    have h2 : 0 ≤ Hurwitz.norm α := Hurwitz.norm_nonneg α
+    omega
+  -- Punt the rest with sorry — see thread for the T-trick continuation
+  sorry
 
 end HurwitzRatHat
