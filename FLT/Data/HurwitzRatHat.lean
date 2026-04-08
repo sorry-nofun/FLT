@@ -375,7 +375,31 @@ lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ 
     rw [hα_eq, h, Submodule.span_singleton_eq_bot.mpr rfl]
   -- α has positive norm
   have hnorm_pos : (Hurwitz.norm α) > 0 := Hurwitz.norm_pos_of_ne_zero hα_ne_zero
-  -- Punt the rest with sorry — see thread for the T-trick continuation
+  -- Step 6: Show w' ∈ 𝓞^*α via the T-trick
+  -- T = NM * (norm α).toNat
+  let T : ℕ+ := (N * M) * ⟨(Hurwitz.norm α).toNat, by
+    rw [Int.lt_toNat]; exact_mod_cast hnorm_pos⟩
+  -- (T : 𝓞^) ∈ 𝓞^*w' via the helper
+  have hT_in_w : ((T : 𝓞^)) ∈ Submodule.span 𝓞^ ({w'} : Set 𝓞^) := by
+    -- (T : 𝓞^) = (NM : 𝓞^) * ((norm α).toNat : 𝓞^) = (z' * w') * ((norm α).toNat : 𝓞^)
+    -- Apply mul_natCast_mem_span_singleton_of_mul_eq with NM = z' * w'
+    have hT_eq : ((T : ℕ+) : 𝓞^) = ((N * M : ℕ+) : 𝓞^) * (((Hurwitz.norm α).toNat : ℕ) : 𝓞^) := by
+      show ((((N * M).val : ℕ) * ((Hurwitz.norm α).toNat : ℕ) : ℕ) : 𝓞^) = _
+      push_cast
+      ring
+    rw [hT_eq]
+    -- Inlined version of mul_natCast_mem_span_singleton_of_mul_eq (PR #40):
+    -- (z' * w') * (k : 𝓞^) ∈ 𝓞^*w' since (k : 𝓞^) is central, so we can rewrite
+    -- z' * w' * k = z' * (w' * k) = z' * (k * w') = (z' * k) * w' which is in 𝓞^*w'.
+    have hzw' : ((N * M : ℕ+) : 𝓞^) = z' * w' := hzw.symm
+    rw [hzw']
+    have hcomm : w' * (((Hurwitz.norm α).toNat : ℕ) : 𝓞^) =
+        (((Hurwitz.norm α).toNat : ℕ) : 𝓞^) * w' := ((Nat.cast_commute _ w').eq).symm
+    have heq : z' * w' * (((Hurwitz.norm α).toNat : ℕ) : 𝓞^) =
+        (z' * (((Hurwitz.norm α).toNat : ℕ) : 𝓞^)) * w' := by
+      rw [mul_assoc, hcomm, ← mul_assoc]
+    rw [heq]
+    exact Submodule.smul_mem _ _ (Submodule.mem_span_singleton_self w')
   sorry
 
 end HurwitzRatHat
