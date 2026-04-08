@@ -33,6 +33,12 @@ instance : IsAddTorsionFree 𝓞^ := by
   rw [Submodule.isTorsionFree_iff_torsion_eq_bot]
   exact Module.Flat.torsion_eq_bot
 
+/-- The canonical ℤ-algebra inclusion `𝓞 → 𝓞^` sending `y` to `y ⊗ₜ 1`. -/
+noncomputable abbrev toHurwitzHat : 𝓞 →ₐ[ℤ] 𝓞^ := Algebra.TensorProduct.includeLeft
+
+/-- The underlying function of `toHurwitzHat` is `y ↦ y ⊗ₜ 1`. -/
+lemma toHurwitzHat_apply (y : 𝓞) : toHurwitzHat y = y ⊗ₜ[ℤ] (1 : ZHat) := rfl
+
 /-- The map `𝓞 → 𝓞^` sending `y` to `y ⊗ₜ 1` is surjective modulo `N`.
 That is, every element of `𝓞 ⊗[ℤ] ZHat` is congruent to an element of `𝓞` modulo `N`. -/
 lemma surjective_pnat_quotient (N : ℕ+) (z : 𝓞 ⊗[ℤ] ZHat) :
