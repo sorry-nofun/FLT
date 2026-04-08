@@ -46,7 +46,23 @@ noncomputable abbrev j₁ : D →ₐ[ℤ] D^ := Algebra.TensorProduct.includeLef
 -- (Algebra.TensorProduct.assoc ℤ ℚ 𝓞 ZHat).symm.trans Algebra.TensorProduct.includeLeft
 
 lemma injective_hRat :
-    Function.Injective j₁ := sorry -- flatness
+    Function.Injective j₁ := by
+  haveI : NoZeroDivisors 𝓞 := ⟨fun {a b} hab => by
+    have hn : Hurwitz.norm a * Hurwitz.norm b = 0 := by
+      rw [← Hurwitz.norm_mul]; exact (Hurwitz.norm_eq_zero _).mpr hab
+    rcases mul_eq_zero.mp hn with h | h
+    · exact Or.inl ((Hurwitz.norm_eq_zero _).mp h)
+    · exact Or.inr ((Hurwitz.norm_eq_zero _).mp h)⟩
+  haveI : IsDomain 𝓞 := NoZeroDivisors.to_isDomain _
+  haveI : IsAddTorsionFree 𝓞 := IsDomain.instIsAddTorsionFreeOfCharZero _
+  haveI : Module.Flat ℤ 𝓞 := by
+    rw [IsDedekindDomain.flat_iff_torsion_eq_bot]
+    exact Submodule.isTorsionFree_iff_torsion_eq_bot.mp inferInstance
+  haveI : Module.Flat ℤ ℚ := IsLocalization.flat ℚ (nonZeroDivisors ℤ)
+  haveI : Module.Flat ℤ D := by
+    change Module.Flat ℤ (ℚ ⊗[ℤ] 𝓞)
+    infer_instance
+  exact Algebra.TensorProduct.includeLeft_injective (Int.cast_injective (α := ZHat))
 
 /-- The inclusion from the profinite Hurwitz quaternions to to 𝔸+𝔸i+𝔸j+𝔸k,
 with 𝔸 the finite adeles of ℚ. -/
@@ -55,7 +71,25 @@ noncomputable abbrev j₂ : 𝓞^ →ₐ[ℤ] D^ :=
   (Algebra.TensorProduct.includeRight : 𝓞^ →ₐ[ℤ] ℚ ⊗ 𝓞^)
 
 lemma injective_zHat :
-    Function.Injective j₂ := sorry -- flatness
+    Function.Injective j₂ := by
+  haveI : NoZeroDivisors 𝓞 := ⟨fun {a b} hab => by
+    have hn : Hurwitz.norm a * Hurwitz.norm b = 0 := by
+      rw [← Hurwitz.norm_mul]; exact (Hurwitz.norm_eq_zero _).mpr hab
+    rcases mul_eq_zero.mp hn with h | h
+    · exact Or.inl ((Hurwitz.norm_eq_zero _).mp h)
+    · exact Or.inr ((Hurwitz.norm_eq_zero _).mp h)⟩
+  haveI : IsDomain 𝓞 := NoZeroDivisors.to_isDomain _
+  haveI : IsAddTorsionFree 𝓞 := IsDomain.instIsAddTorsionFreeOfCharZero _
+  haveI : Module.Flat ℤ 𝓞 := by
+    rw [IsDedekindDomain.flat_iff_torsion_eq_bot]
+    exact Submodule.isTorsionFree_iff_torsion_eq_bot.mp inferInstance
+  haveI : Module.Flat ℤ 𝓞^ := by
+    change Module.Flat ℤ (𝓞 ⊗[ℤ] ZHat)
+    infer_instance
+  intro x y hxy
+  have := (AlgEquiv.injective
+    (Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat).symm) hxy
+  exact Algebra.TensorProduct.includeRight_injective (Int.cast_injective (α := ℚ)) this
 
 -- should I rearrange tensors? Not sure if D^ should be (ℚ ⊗ 𝓞) ⊗ ℤhat or ℚ ⊗ (𝓞 ⊗ Zhat)
 lemma canonicalForm (z : D^) : ∃ (N : ℕ+) (z' : 𝓞^), z = j₁ ((N⁻¹ : ℚ) ⊗ₜ 1 : D) * j₂ z' := by
