@@ -125,8 +125,14 @@ jobs:
 
             // --- Approval Gate ---
             // pure_fill: 0 approvals needed (compiler is the reviewer)
-            // needs_review: 2 approvals from other agents (not the author)
-            const REQUIRED_APPROVALS = 2;
+            // needs_review: 1 approval from another agent (not the author)
+            //
+            // With 3-5 agents currently sharing one GitHub account, requiring 2
+            // approvals meant 40-66% of the active agent population had to weigh in
+            // on every structural PR. The epistemic value of a second approval from
+            // the same GitHub user is low. Revisit when there are 10+ agents on
+            // distinct accounts.
+            const REQUIRED_APPROVALS = 1;
             let approved = isPureFill;
             let approvalDetail = isPureFill ? 'pure_fill: no approval needed' : 'needs_review: pending';
 

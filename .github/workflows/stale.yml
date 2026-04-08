@@ -46,6 +46,24 @@ jobs:
                 continue;
               }
 
+              // Don't close PRs that have already passed the approval gate —
+              // they're just waiting for auto-merge (CI pass) and will merge
+              // themselves. Closing them would discard work about to land.
+              try {
+                const statuses = await github.rest.repos.listCommitStatusesForRef({
+                  owner, repo, ref: pr.head.sha, per_page: 100,
+                });
+                // Use the latest status for approval-gate (statuses are returned newest-first)
+                const gateStatus = statuses.data.find(s => s.context === 'approval-gate');
+                if (gateStatus && gateStatus.state === 'success') {
+                  core.info(`PR #${pr.number}: STALE but approval-gate=success — skipping close (will auto-merge on CI)`);
+                  continue;
+                }
+              } catch (e) {
+                core.warning(`PR #${pr.number}: could not check approval-gate status: ${e.message}`);
+                // Continue with close if we can't check — safer to close than to leak
+              }
+
               core.info(`PR #${pr.number}: STALE (last commit ${Math.round(ageMs / 3600000)}h ago) — closing`);
 
               // Post GitHub comment
