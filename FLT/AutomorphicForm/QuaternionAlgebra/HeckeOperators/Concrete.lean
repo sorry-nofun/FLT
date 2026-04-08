@@ -492,9 +492,39 @@ noncomputable instance instAlgebra :
       WeightTwoAutomorphicFormOfLevel (U1 r S) R))
 
 noncomputable instance instCommRing :
-    CommRing (HeckeAlgebra F D r S R) where
-  __ := instRing F D r S R
-  mul_comm := sorry -- #585 -- check on generators
+    CommRing (HeckeAlgebra F D r S R) := by
+  -- #585: reduce commutativity of the Hecke algebra to pairwise commutativity of the
+  -- generators `Tᵥ` (for `v ∉ S`) and `Uᵥ,α` (for `v ∈ S`, `α ≠ 0`).
+  unfold HeckeAlgebra
+  apply Algebra.adjoinCommRingOfComm R
+  rintro a ha b hb
+  -- Case split on `ha`, `hb` to handle the four generator pairs:
+  --   (T_v, T_w), (T_v, U_{w,β}), (U_{v,α}, T_w), (U_{v,α}, U_{w,β}).
+  rcases ha with ⟨v, hv, rfl⟩ | ⟨v, hv, α, hα, rfl⟩ <;>
+  rcases hb with ⟨w, hw, rfl⟩ | ⟨w, hw, β, hβ, rfl⟩
+  · -- (T_v, T_w): Hecke operators at good primes commute. Follows from the fact that
+    -- the coset representatives `diag(ϖ_v,1)` and `diag(ϖ_w,1)` have disjoint support
+    -- in the restricted product when v ≠ w (and trivially when v = w).
+    by_cases hvw : v = w
+    · -- v = w: T_v = T_w, so the product commutes with itself trivially.
+      subst hvw
+      rfl
+    · -- v ≠ w: disjoint support argument via `AbstractHeckeOperator.comm`.
+      sorry
+  · -- (T_v, U_{w,β}): good prime T_v commutes with bad prime U_{w,β}. Since v ∉ S and
+    -- w ∈ S, we have v ≠ w, so the representatives are supported at disjoint places.
+    sorry
+  · -- (U_{v,α}, T_w): symmetric to the previous case.
+    sorry
+  · -- (U_{v,α}, U_{w,β}): bad prime operators.
+    by_cases hvw : v = w
+    · -- v = w: use `HeckeOperator.U_comm`. Need to transport `hβ` across `hvw`.
+      subst hvw
+      change HeckeOperator.U r S R α hα * HeckeOperator.U r S R β hβ =
+        HeckeOperator.U r S R β hβ * HeckeOperator.U r S R α hα
+      exact HeckeOperator.U_comm r S R hα hβ
+    · -- v ≠ w: disjoint support argument.
+      sorry
 
 variable {F S} in
 /-- The Hecke operator Tᵥ as an element of the Hecke algebra. -/
