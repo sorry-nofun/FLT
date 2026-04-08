@@ -59,7 +59,45 @@ lemma injective_zHat :
 
 -- should I rearrange tensors? Not sure if D^ should be (ℚ ⊗ 𝓞) ⊗ ℤhat or ℚ ⊗ (𝓞 ⊗ Zhat)
 lemma canonicalForm (z : D^) : ∃ (N : ℕ+) (z' : 𝓞^), z = j₁ ((N⁻¹ : ℚ) ⊗ₜ 1 : D) * j₂ z' := by
-  sorry
+  suffices h : ∀ (w : ℚ ⊗[ℤ] 𝓞^), ∃ (N : ℕ+) (z' : 𝓞^), w = (1 / N : ℚ) ⊗ₜ z' by
+    obtain ⟨N, z', hw⟩ := h ((Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat) z)
+    refine ⟨N, z', ?_⟩
+    have hz : z = (Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat).symm
+        ((1 / N : ℚ) ⊗ₜ[ℤ] z') := by
+      rw [← hw, AlgEquiv.symm_apply_apply]
+    rw [hz]
+    have hmul : ((1 / N : ℚ) ⊗ₜ[ℤ] z' : ℚ ⊗[ℤ] 𝓞^)
+        = ((1 / N : ℚ) ⊗ₜ (1 : 𝓞^)) * ((1 : ℚ) ⊗ₜ z') := by
+      simp [Algebra.TensorProduct.tmul_mul_tmul]
+    rw [hmul, map_mul]
+    have hj1 : ((Algebra.TensorProduct.assoc ℤ ℤ ℤ ℚ 𝓞 ZHat).symm
+        ((1 / N : ℚ) ⊗ₜ (1 : 𝓞^)) : D^)
+        = j₁ (((↑↑N : ℚ)⁻¹ : ℚ) ⊗ₜ[ℤ] (1 : 𝓞) : D) := by
+      change _ = (((↑↑N : ℚ)⁻¹ ⊗ₜ[ℤ] (1 : 𝓞)) ⊗ₜ[ℤ] (1 : ZHat) : D^)
+      rw [one_div]
+      rfl
+    rw [hj1]
+    rfl
+  intro w
+  induction w using TensorProduct.induction_on with
+  | zero => exact ⟨1, 0, by simp⟩
+  | tmul q x =>
+    refine ⟨⟨q.den, q.den_pos⟩, q.num • x, ?_⟩
+    rw [show (1 / (↑↑⟨q.den, q.den_pos⟩ : ℕ+) : ℚ) = (q.den : ℚ)⁻¹ from by simp [one_div]]
+    rw [TensorProduct.tmul_smul, TensorProduct.smul_tmul', zsmul_eq_mul,
+      ← Rat.mul_den_eq_num, mul_assoc,
+      mul_inv_cancel₀ (Nat.cast_ne_zero.mpr (Rat.den_ne_zero q)), mul_one]
+  | add x y hx hy =>
+    obtain ⟨N₁, z₁, rfl⟩ := hx
+    obtain ⟨N₂, z₂, rfl⟩ := hy
+    refine ⟨N₁ * N₂, (N₁ : ℤ) • z₂ + (N₂ : ℤ) • z₁, ?_⟩
+    simp only [TensorProduct.tmul_add,
+      TensorProduct.tmul_smul, TensorProduct.smul_tmul']
+    simp only [one_div, PNat.mul_coe, Nat.cast_mul, mul_inv_rev, zsmul_eq_mul, Int.cast_natCast,
+      ne_eq, Nat.cast_eq_zero, PNat.ne_zero, not_false_eq_true, mul_inv_cancel_left₀]
+    rw [add_comm]
+    congr
+    simp [mul_comm]
 
 lemma completed_units (z : D^ˣ) : ∃ (u : Dˣ) (v : 𝓞^ˣ), (z : D^) = j₁ u * j₂ v := sorry
 
