@@ -421,6 +421,10 @@ lemma norm_eq_zero (x : 𝓞) : norm x = 0 ↔ x = 0 := by
     pow_eq_zero_iff, mul_eq_zero, or_false] at h1
   ext <;> assumption
 
+/-- The norm of a nonzero Hurwitz quaternion is strictly positive. -/
+lemma norm_pos_of_ne_zero {x : 𝓞} (hx : x ≠ 0) : 0 < norm x :=
+  (norm_nonneg x).lt_of_ne (fun h => hx ((norm_eq_zero x).mp h.symm))
+
 open Quaternion in
 lemma normSq_toQuaternion (z : 𝓞) : normSq (toQuaternion z) = norm z := by
   apply coe_injective
