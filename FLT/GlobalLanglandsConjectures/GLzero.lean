@@ -116,18 +116,33 @@ namespace GLn
 def ofComplex (z : ℂ) {n : ℕ} (ρ : Weight n) (hρ : ρ.IsTrivial) :
     AutomorphicFormForGLnOverQ n ρ where
       toFun _ := z
-      is_smooth := sorry
-      is_periodic := sorry
-      is_slowly_increasing := sorry
+      is_smooth := {
+        continuous := by continuity
+        loc_cst := fun _ => IsLocallyConstant.const z
+        smooth := by simp [contMDiff_const]
+      }
+      is_periodic := by simp
+      is_slowly_increasing x := ⟨‖z‖, 0, by simp⟩
       is_finite_cod := sorry -- needs a better name
       has_finite_level := sorry -- needs a better name
 
 -- no idea why it's not computable
 noncomputable def classification (ρ : Weight 0) : AutomorphicFormForGLnOverQ 0 ρ ≃ ℂ where
   toFun f := f 1
-  invFun z := ofComplex z ρ sorry
-  left_inv := sorry
-  right_inv := sorry
+  invFun z := ofComplex z ρ (by
+    unfold Weight.IsTrivial
+    ext g
+    rw [show g = 1 from Subsingleton.elim g 1, map_one, map_one])
+  left_inv := by
+    rw [Function.LeftInverse]
+    simp only [ofComplex]
+    intro x
+    have h : x.toFun = fun _ => x.toFun 1 := by
+      exact funext fun g ↦ congrArg x.toFun <| Subsingleton.eq_one g
+    simp_rw [← h]
+  right_inv := by
+    rw [Function.RightInverse, Function.LeftInverse]
+    simp [ofComplex]
 
 -- Can this be beefed up to an isomorphism of complex
 -- vector spaces?
