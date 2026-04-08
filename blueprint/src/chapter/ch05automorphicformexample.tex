@@ -715,10 +715,13 @@ with $a,b,c,d\in\Zhat$. The basic thing we need is this:
 
 \begin{theorem}
     \label{Hurwitz.surjective_pnat_quotient}
+    \lean{HurwitzHat.surjective_pnat_quotient}
     \uses{Hurwitz}
+    \leanok
     If $N$ is a positive natural then the obvious map $\calO\to\calOhat/N\calOhat$ is surjective.
 \end{theorem}
 \begin{proof}
+    \leanok
     This is just four copies of the surjection $\Z\to\Zhat/N\Zhat$.
     Note that this latter map is surjective because $\Z\to\Z/N\Z$ is surjective,
     hence given $z\in\Zhat$ you can subtract an integer $w$ such

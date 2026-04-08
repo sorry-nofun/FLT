@@ -13,6 +13,33 @@ scoped notation "𝓞^" => HurwitzHat
 
 noncomputable instance : Ring 𝓞^ := Algebra.TensorProduct.instRing
 
+/-- The map `𝓞 → 𝓞^` sending `y` to `y ⊗ₜ 1` is surjective modulo `N`.
+That is, every element of `𝓞 ⊗[ℤ] ZHat` is congruent to an element of `𝓞` modulo `N`. -/
+lemma surjective_pnat_quotient (N : ℕ+) (z : 𝓞 ⊗[ℤ] ZHat) :
+    ∃ (y : 𝓞) (w : 𝓞 ⊗[ℤ] ZHat), z = y ⊗ₜ[ℤ] 1 + (N : ℤ) • w := by
+  induction z using TensorProduct.induction_on with
+  | zero => exact ⟨0, 0, by simp⟩
+  | tmul a w₀ =>
+    obtain ⟨q, r, hqr, _⟩ := ZHat.nat_dense N w₀
+    refine ⟨(r : ℤ) • a, a ⊗ₜ[ℤ] q, ?_⟩
+    rw [hqr, TensorProduct.tmul_add]
+    have h1 : a ⊗ₜ[ℤ] ((r : ℕ) : ZHat) = ((r : ℤ) • a) ⊗ₜ[ℤ] (1 : ZHat) := by
+      have : ((r : ℕ) : ZHat) = (r : ℤ) • (1 : ZHat) := by
+        rw [zsmul_eq_mul, mul_one]; push_cast; rfl
+      rw [this, TensorProduct.tmul_smul, TensorProduct.smul_tmul']
+    have h2 : a ⊗ₜ[ℤ] ((N : ℕ) * q : ZHat) = (N : ℤ) • (a ⊗ₜ[ℤ] q) := by
+      have : ((N : ℕ) * q : ZHat) = (N : ℤ) • q := by
+        rw [zsmul_eq_mul]; push_cast; rfl
+      rw [this, TensorProduct.tmul_smul]
+    rw [h1, h2]
+    abel
+  | add x y hx hy =>
+    obtain ⟨y₁, w₁, hx⟩ := hx
+    obtain ⟨y₂, w₂, hy⟩ := hy
+    refine ⟨y₁ + y₂, w₁ + w₂, ?_⟩
+    rw [hx, hy, TensorProduct.add_tmul, smul_add]
+    abel
+
 end HurwitzHat
 
 /-- The quaternion algebra ℚ + ℚi + ℚj + ℚk. -/
