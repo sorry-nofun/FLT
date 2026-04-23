@@ -12,7 +12,7 @@ on:
       - 'lean-toolchain'
       - 'lakefile.toml'
       - 'lake-manifest.json'
-  pull_request:
+  pull_request_target:
     branches:
       - main
     paths:
