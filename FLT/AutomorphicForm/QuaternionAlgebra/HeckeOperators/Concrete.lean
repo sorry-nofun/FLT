@@ -1167,6 +1167,7 @@ namespace HeckeOperator
 
 set_option maxSynthPendingDepth 1 in
 open scoped TensorProduct.RightActions in
+omit [IsTotallyReal F] in
 /-- The T_v Hecke operator's underlying group element equals `diag r α hα`
 when α is the local uniformizer at v. -/
 lemma T_eq_diag (v : HeightOneSpectrum (𝓞 F))
@@ -1175,19 +1176,45 @@ lemma T_eq_diag (v : HeightOneSpectrum (𝓞 F))
     T r R v = AbstractHeckeOperator.HeckeOperator (R := R) (diag r α hα) (U1 r S) (U1 r S)
       (QuotientGroup.mk_image_finite_of_compact_of_open (U1_compact r S) (U1_open r S)) := by
   unfold T
-  congr 1
-  -- Show two Units in (D ⊗ 𝔸_F^∞)ˣ are equal by showing their values are equal.
-  -- Both go through r.symm applied to a GL₂(𝔸) element.
-  -- Show they produce the same D ⊗ 𝔸 element.
   unfold diag
-  -- Apply Units.ext to reduce to value equality.
-  ext : 1
-  -- Both sides map r.symm to a GL₂(𝔸_F) element.
-  -- LHS value: r.symm (diagonal ![ϖ_v, 1])
-  -- RHS value: r.symm (restrictedProduct.symm (mulSingle v (Local.diag α hα)))
-  -- These are equal because diagonal ![ϖ_v, 1] = restrictedProduct.symm (mulSingle v (Local.diag α hα))
-  -- when α coerces to the uniformizer at v.
-  sorry
+  dsimp only
+  congr 1
+  have key : Matrix.GeneralLinearGroup.diagonal
+      ![FiniteAdeleRing.localUniformiserUnit F v, 1] =
+      FiniteAdeleRing.GL2.restrictedProduct.symm
+        (RestrictedProduct.mulSingle _ v (Local.GL2.diag α hα)) := by
+    apply FiniteAdeleRing.GL2.restrictedProduct.injective
+    rw [ContinuousMulEquiv.apply_symm_apply]
+    apply RestrictedProduct.ext; intro w
+    obtain rfl | hwv := eq_or_ne w v
+    · simp only [RestrictedProduct.mulSingle_eq_same]
+      ext i j
+      change (FiniteAdeleRing.GL2.toAdicCompletion w
+        (Matrix.GeneralLinearGroup.diagonal
+          ![FiniteAdeleRing.localUniformiserUnit F w, 1])).val i j = _
+      fin_cases i <;> fin_cases j <;>
+        simp (config := { unfoldPartialApp := true }) [FiniteAdeleRing.GL2.toAdicCompletion,
+          Matrix.GeneralLinearGroup.diagonal, Matrix.diagonal,
+          Local.GL2.diag, h_eq, FiniteAdeleRing.localUniformiserUnit,
+          FiniteAdeleRing.localUniformiser,
+          IsDedekindDomain.FiniteAdeleRing.toAdicCompletion,
+          RestrictedProduct.evalRingHom, RestrictedProduct.evalMonoidHom] <;>
+        exact @Pi.mulSingle_eq_same (HeightOneSpectrum (𝓞 F))
+          (fun v => v.adicCompletion F) _ _ w (adicCompletionUniformizer F w)
+    · simp only [RestrictedProduct.mulSingle_eq_of_ne _ _ hwv]
+      ext i j
+      change (FiniteAdeleRing.GL2.toAdicCompletion w
+        (Matrix.GeneralLinearGroup.diagonal
+          ![FiniteAdeleRing.localUniformiserUnit F v, 1])).val i j = _
+      fin_cases i <;> fin_cases j <;>
+        simp (config := { unfoldPartialApp := true }) [FiniteAdeleRing.GL2.toAdicCompletion,
+          Matrix.GeneralLinearGroup.diagonal, Matrix.diagonal,
+          FiniteAdeleRing.localUniformiserUnit, FiniteAdeleRing.localUniformiser,
+          IsDedekindDomain.FiniteAdeleRing.toAdicCompletion,
+          RestrictedProduct.evalRingHom, RestrictedProduct.evalMonoidHom] <;>
+        exact Pi.mulSingle_eq_of_ne hwv (adicCompletionUniformizer F v)
+  rw [key]
+  rfl
 
 set_option maxSynthPendingDepth 1 in
 open scoped TensorProduct.RightActions in
