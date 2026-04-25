@@ -212,3 +212,14 @@ lake exe cache get
 ```
 
 If `lake exe cache get` fails after a Mathlib bump, wait ~1 hour and retry.
+
+---
+
+## Known Issues
+
+### Fork Contributor CI Gate
+
+The `Build project` workflow uses `pull_request` trigger, which requires admin approval
+for first-time fork contributors. This blocks all external PRs from merging even when
+the code compiles correctly. If your fork CI passes but the upstream `Build project`
+check shows `action_required`, contact the repository maintainer.
